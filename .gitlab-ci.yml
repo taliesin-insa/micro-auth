@@ -1,0 +1,52 @@
+# https://sanderknape.com/2019/02/automated-deployments-kubernetes-gitlab/
+image: docker:latest
+services:
+  - docker:dind
+
+stages:
+  - build
+  - dev
+  - production
+
+before_script:
+  - export REGISTRY_HOST="clyde.local:5005"
+  - export CONTAINER_IMAGE="${REGISTRY_HOST}/${CI_PROJECT_PATH}/master"
+  - export CONTAINER_IMAGE_SHA="${CONTAINER_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+  - export KUBE_SERVER="https://10.133.33.49:6443"
+
+build:
+  stage: build
+  script:
+    - docker login -u nobody -p nobody ${REGISTRY_HOST}
+    - docker build -t ${CONTAINER_IMAGE_SHA} .
+    - docker tag ${CONTAINER_IMAGE_SHA} ${CONTAINER_IMAGE}:dev
+    - docker push ${CONTAINER_IMAGE_SHA}
+    - docker push ${CONTAINER_IMAGE}:dev
+
+dev:
+  stage: dev
+  image: dtzar/helm-kubectl
+  script:
+    - kubectl config set-cluster k8s --server="${KUBE_SERVER}" --certificate-authority=${CERTIFICATE_AUTHORITY_DATA} --embed-certs=true
+    - kubectl config set-credentials gitlab --token="${USER_TOKEN}"
+    - kubectl config set-context default --cluster=k8s --user=gitlab
+    - kubectl config use-context default
+    - kubectl apply -f deployment.yml
+    - kubectl apply -f service.yml
+    - kubectl set image deployment/export-dev export-dev=${CONTAINER_IMAGE_SHA} --record -n gitlab-managed-apps
+
+production:
+  stage: production
+  when: manual
+  image: docker:latest
+  script:
+    - wget -q https://storage.googleapis.com/kubernetes-release/release/v1.17.3/bin/linux/amd64/kubectl -O /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl
+    - docker tag ${CONTAINER_IMAGE}:dev ${CONTAINER_IMAGE}:prod
+    - docker push ${CONTAINER_IMAGE}:prod
+    - kubectl config set-cluster k8s --server="${KUBE_SERVER}" --certificate-authority=${CERTIFICATE_AUTHORITY_DATA} --embed-certs=true
+    - kubectl config set-credentials gitlab --token="${USER_TOKEN}"
+    - kubectl config set-context default --cluster=k8s --user=gitlab
+    - kubectl config use-context default
+    - kubectl apply -f deployment.yml
+    - kubectl apply -f service.yml
+    - kubectl set image deployment/export export=${CONTAINER_IMAGE_SHA} --record -n gitlab-managed-apps

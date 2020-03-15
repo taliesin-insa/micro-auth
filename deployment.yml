@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: gitlab-managed-apps
+  labels:
+    app: auth
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: auth
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 33%
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      containers:
+        - name: auth
+          image: clyde.local:5005/taliesin/micro-auth/master:prod
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MICRO_ENVIRONMENT
+              value: "production"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-db-secrets
+                  key: password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-dev
+  namespace: gitlab-managed-apps
+  labels:
+    app: auth-dev
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: auth-dev
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 33%
+  template:
+    metadata:
+      labels:
+        app: auth-dev
+    spec:
+      containers:
+        - name: auth-dev
+          image: clyde.local:5005/taliesin/micro-auth/master:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MICRO_ENVIRONMENT
+              value: "dev"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-db-secrets
+                  key: password
