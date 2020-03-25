@@ -37,7 +37,8 @@ dev:
 
 production:
   stage: production
-  when: manual
+  only:
+    - master
   image: docker:latest
   script:
     - wget -q https://storage.googleapis.com/kubernetes-release/release/v1.17.3/bin/linux/amd64/kubectl -O /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl
