@@ -26,6 +26,15 @@ type VerifyRequest struct {
 	Token  string
 }
 
+type JwtClaims struct {
+	Username  string
+	jwt.StandardClaims
+}
+
+type VerifyResponse struct {
+	Username  string
+}
+
 type AuthResponse struct {
 	Username  string
 	Token string
@@ -81,9 +90,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	if dbHash == hash {
 		// generate jwt token
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"username": reqData.Username,
-		})
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, JwtClaims{Username: reqData.Username})
 
 		tokenString, signingErr := token.SignedString(HMACSecret)
 
@@ -111,17 +118,17 @@ func verify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var reqData VerifyRequest
-	err = json.Unmarshal(reqBody, &reqData)
+	unmarshalErr := json.Unmarshal(reqBody, &reqData)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Printf("[ERROR] Unmarshal request json failed: %v", err.Error())
-		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
 		return
 	}
 
 	// XXX: the same HMAC secret is used for each signing, this may change
 
-	token, verifyErr := jwt.Parse(reqData.Token, func(token *jwt.Token) (interface{}, error) {
+	token, verifyErr := jwt.ParseWithClaims(reqData.Token, &JwtClaims{}, func(token *jwt.Token) (interface{}, error) {
 		// Don't forget to validate the alg is what you expect:
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -132,16 +139,19 @@ func verify(w http.ResponseWriter, r *http.Request) {
 
 	if verifyErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("[ERROR] Error while verifying JWT: %v", err.Error())
-		_, err = w.Write([]byte("[MICRO-AUTH] Could not verify token (bad input data ?)"))
+		log.Printf("[ERROR] Error while verifying JWT: %v", verifyErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Could not verify token (bad input data ?)"))
 		return
 	}
 
 
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		fmt.Println(claims["foo"], claims["nbf"])
+	if claims, ok := token.Claims.(*JwtClaims); ok && token.Valid {
+		w.WriteHeader(http.StatusOK)
+		m, _ :=json.Marshal(VerifyResponse{Username: claims.Username})
+		w.Write(m)
 	} else {
-		fmt.Println(err)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
 	}
 }
 
