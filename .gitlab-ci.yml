@@ -33,7 +33,7 @@ dev:
     - kubectl config use-context default
     - kubectl apply -f deployment.yml
     - kubectl apply -f service.yml
-    - kubectl set image deployment/export-dev export-dev=${CONTAINER_IMAGE_SHA} --record -n gitlab-managed-apps
+    - kubectl set image deployment/auth-dev auth-dev=${CONTAINER_IMAGE_SHA} --record -n gitlab-managed-apps
 
 production:
   stage: production
@@ -50,4 +50,4 @@ production:
     - kubectl config use-context default
     - kubectl apply -f deployment.yml
     - kubectl apply -f service.yml
-    - kubectl set image deployment/export export=${CONTAINER_IMAGE_SHA} --record -n gitlab-managed-apps
+    - kubectl set image deployment/auth auth=${CONTAINER_IMAGE_SHA} --record -n gitlab-managed-apps
