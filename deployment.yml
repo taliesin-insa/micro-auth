@@ -33,6 +33,11 @@ spec:
                 secretKeyRef:
                   name: auth-db-secrets
                   key: password
+            - name: HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-hmac-secrets
+                  key: secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -70,3 +75,8 @@ spec:
                 secretKeyRef:
                   name: auth-db-secrets
                   key: password
+            - name: HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-hmac-secrets
+                  key: secret
