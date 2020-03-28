@@ -44,7 +44,8 @@ func authenticate(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(reqBody, &reqData)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_, err = w.Write([]byte("Wrong request body format: this microservice needs a properly formatted JSON"))
+		log.Printf("[ERROR] Unmarshal request json failed: %v", err.Error())
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
 		return
 	}
 
@@ -53,7 +54,8 @@ func authenticate(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, err = w.Write([]byte("Server error: could not prepare request"))
+		log.Printf("[ERROR] Error while preparing request: %v", err.Error())
+		_, err = w.Write([]byte("[MICRO-AUTH] Could not prepare request"))
 		return
 	}
 
