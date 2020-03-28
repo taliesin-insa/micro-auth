@@ -94,7 +94,7 @@ func main() {
 		dbName = "taliesin_dev"
 	}
 
-	databasePtr, err := sql.Open("mysql", "taliesin:"+passwordValue+"@10.133.33.51/"+dbName)
+	databasePtr, err := sql.Open("mysql", "taliesin:"+passwordValue+"@tcp(10.133.33.51:3306)/"+dbName)
 	Db = databasePtr
 
 	if err != nil {
