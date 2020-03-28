@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/dgrijalva/jwt-go"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	"io/ioutil"
@@ -14,15 +15,20 @@ import (
 )
 
 var Db *sql.DB
+var HMACSecret []byte
 
 type AuthRequest struct {
 	Username  string
 	Password  string
 }
 
+type VerifyRequest struct {
+	Token  string
+}
+
 type AuthResponse struct {
 	Username  string
-	Role int
+	Token string
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +38,7 @@ func home(w http.ResponseWriter, r *http.Request) {
 // CREATE DATABASE taliesin;
 // CREATE DATABASE taliesin_dev;
 // CREATE TABLE users(username varchar(100), password varchar(255), role int, primary key(username));
-func authenticate(w http.ResponseWriter, r *http.Request) {
+func login(w http.ResponseWriter, r *http.Request) {
 
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -69,15 +75,73 @@ func authenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// verify that sha256(provided password) = database hash
+
 	dbHash := fmt.Sprintf("%x", sha256.Sum256([]byte(reqData.Password)))
 
 	if dbHash == hash {
+		// generate jwt token
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"username": reqData.Username,
+		})
+
+		tokenString, signingErr := token.SignedString(HMACSecret)
+
+		if signingErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("[ERROR] Error while generating JWT: %v", err.Error())
+			_, err = w.Write([]byte("[MICRO-AUTH] Error while generating secret"))
+			return
+		}
+
 		w.WriteHeader(http.StatusOK)
-		m, _ :=json.Marshal(AuthResponse{Username:reqData.Username})
+		m, _ :=json.Marshal(AuthResponse{Username:reqData.Username, Token:tokenString})
 		w.Write(m)
 	} else {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
+	}
+}
+
+func verify(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var reqData VerifyRequest
+	err = json.Unmarshal(reqBody, &reqData)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[ERROR] Unmarshal request json failed: %v", err.Error())
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	// XXX: the same HMAC secret is used for each signing, this may change
+
+	token, verifyErr := jwt.Parse(reqData.Token, func(token *jwt.Token) (interface{}, error) {
+		// Don't forget to validate the alg is what you expect:
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return HMACSecret, nil
+	})
+
+	if verifyErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Error while verifying JWT: %v", err.Error())
+		_, err = w.Write([]byte("[MICRO-AUTH] Could not verify token (bad input data ?)"))
+		return
+	}
+
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		fmt.Println(claims["foo"], claims["nbf"])
+	} else {
+		fmt.Println(err)
 	}
 }
 
@@ -86,10 +150,16 @@ func main() {
 	var passwordValue string
 	var dbName = "taliesin"
 
-	if value, isPasswordPresent := os.LookupEnv("DB_PASSWORD") ; !isPasswordPresent {
+	if value, isDbPasswordPresent := os.LookupEnv("DB_PASSWORD") ; !isDbPasswordPresent {
 		panic("DB_PASSWORD is not present in env, aborting.")
 	} else {
 		passwordValue = value
+	}
+
+	if value, isHMACSecretPresent := os.LookupEnv("HMAC_SECRET") ; !isHMACSecretPresent {
+		panic("HMAC_SECRET is not present in env, aborting.")
+	} else {
+		HMACSecret = []byte(value)
 	}
 
 	if os.Getenv("MICRO_ENVIRONMENT") != "production" {
@@ -107,7 +177,8 @@ func main() {
 
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/", home)
-	router.HandleFunc("/auth", authenticate).Methods("POST")
+	router.HandleFunc("/login", login).Methods("POST")
+	router.HandleFunc("/verifyToken", verify).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":8080", router))
 }

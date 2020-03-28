@@ -11,6 +11,7 @@ WORKDIR /src/micro-auth
 # Download dependancies (if you try to build your image without following lines you will see missing packages)
 RUN go get -u github.com/gorilla/mux
 RUN go get -u github.com/go-sql-driver/mysql
+RUN go get -u github.com/dgrijalva/jwt-go
 
 # Build all project statically (prevent some exec user process caused "no such file or directory" error)
 ENV CGO_ENABLED=0
