@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 var Db *sql.DB
@@ -47,6 +48,7 @@ func home(w http.ResponseWriter, r *http.Request) {
 // CREATE DATABASE taliesin;
 // CREATE DATABASE taliesin_dev;
 // CREATE TABLE users(username varchar(100), password varchar(255), role int, primary key(username));
+// CREATE TABLE sessions(id int not null auto_increment, token varchar(256), primary key(id));
 func login(w http.ResponseWriter, r *http.Request) {
 
 	reqBody, err := ioutil.ReadAll(r.Body)
@@ -65,20 +67,20 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 
 
-	statement, err := Db.Prepare("SELECT password FROM users WHERE username = ?")
+	selectStatement, selectErr := Db.Prepare("SELECT password FROM users WHERE username = ?")
 
-	if err != nil {
+	if selectErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("[ERROR] Error while preparing request: %v", err.Error())
+		log.Printf("[ERROR] Error while preparing request: %v", selectErr.Error())
 		_, err = w.Write([]byte("[MICRO-AUTH] Could not prepare request"))
 		return
 	}
 
-	defer statement.Close()
+	defer selectStatement.Close()
 
 	var hash string
 
-	err = statement.QueryRow(reqData.Username).Scan(&hash)
+	err = selectStatement.QueryRow(reqData.Username).Scan(&hash)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -97,9 +99,33 @@ func login(w http.ResponseWriter, r *http.Request) {
 		if signingErr != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Printf("[ERROR] Error while generating JWT: %v", err.Error())
-			_, err = w.Write([]byte("[MICRO-AUTH] Error while generating secret"))
+			w.Write([]byte("[MICRO-AUTH] Error while generating secret"))
 			return
 		}
+
+		// inserting Token in session table of database
+
+		insertSessionStatement, insertPrepareErr := Db.Prepare("INSERT INTO session VALUES (0, ?)")
+
+		if insertPrepareErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("[ERROR] Error while preparing INSERT of session data : %v", insertPrepareErr.Error())
+			w.Write([]byte("[MICRO-AUTH] Error while writing session data to database"))
+			return
+		}
+
+		defer insertSessionStatement.Close()
+
+		insertRes, insertExecErr := insertSessionStatement.Exec(tokenString)
+		insertedRows, _ := insertRes.RowsAffected()
+
+		if insertExecErr != nil || insertedRows != 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("[ERROR] Error while executing INSERT of session data : %v", insertExecErr.Error())
+			w.Write([]byte("[MICRO-AUTH] Error while writing session data to database"))
+			return
+		}
+
 
 		w.WriteHeader(http.StatusOK)
 		m, _ :=json.Marshal(AuthResponse{Username:reqData.Username, Token:tokenString})
@@ -146,9 +172,41 @@ func verify(w http.ResponseWriter, r *http.Request) {
 
 
 	if claims, ok := token.Claims.(*JwtClaims); ok && token.Valid {
-		w.WriteHeader(http.StatusOK)
-		m, _ :=json.Marshal(VerifyResponse{Username: claims.Username})
-		w.Write(m)
+
+		selectStatement, selectErr := Db.Prepare("SELECT count(session) FROM session WHERE token = ?")
+
+		if selectErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("[ERROR] Error while preparing request: %v", selectErr.Error())
+			_, err = w.Write([]byte("[MICRO-AUTH] Could not prepare request"))
+			return
+		}
+
+		defer selectStatement.Close()
+
+		var count string
+
+		sessionQueryErr := selectStatement.QueryRow(reqData.Token).Scan(&count)
+		intCount, sessionCountErr := strconv.Atoi(count)
+
+		if sessionCountErr != nil {
+			panic("[PANIC] unexpected value received from count(session)")
+		}
+
+		if sessionQueryErr != nil {
+			log.Printf("[ERROR] Error while querying session table: %v", selectErr.Error())
+			_, err = w.Write([]byte("[MICRO-AUTH] Could not query database for session information"))
+			return
+		}
+
+		if intCount == 1 {
+			w.WriteHeader(http.StatusOK)
+			m, _ :=json.Marshal(VerifyResponse{Username: claims.Username})
+			w.Write(m)
+		} else {
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+
 	} else {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -186,9 +244,10 @@ func main() {
 	defer Db.Close()
 
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/auth", home)
-	router.HandleFunc("/auth/login", login).Methods("POST")
-	router.HandleFunc("/auth/verifyToken", verify).Methods("POST")
+	router.HandleFunc("/", home)
+	router.HandleFunc("/login", login).Methods("POST")
+	//router.HandleFunc("/logout", logout).Methods("POST")
+	router.HandleFunc("/verifyToken", verify).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
