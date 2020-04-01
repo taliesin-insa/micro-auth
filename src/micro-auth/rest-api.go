@@ -173,7 +173,7 @@ func verify(w http.ResponseWriter, r *http.Request) {
 
 	if claims, ok := token.Claims.(*JwtClaims); ok && token.Valid {
 
-		selectStatement, selectErr := Db.Prepare("SELECT count(sessions) FROM sessions WHERE token = ?")
+		selectStatement, selectErr := Db.Prepare("SELECT count(token) FROM sessions WHERE token = ?")
 
 		if selectErr != nil {
 			w.WriteHeader(http.StatusInternalServerError)
