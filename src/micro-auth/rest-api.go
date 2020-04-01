@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 var Db *sql.DB
@@ -29,11 +30,13 @@ type VerifyRequest struct {
 
 type JwtClaims struct {
 	Username  string
+	Role string
 	jwt.StandardClaims
 }
 
 type VerifyResponse struct {
 	Username  string
+	Role string
 }
 
 type AuthResponse struct {
@@ -67,7 +70,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 
 
-	selectStatement, selectErr := Db.Prepare("SELECT password FROM users WHERE username = ?")
+	selectStatement, selectErr := Db.Prepare("SELECT password, role FROM users WHERE username = ?")
 
 	if selectErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -79,8 +82,9 @@ func login(w http.ResponseWriter, r *http.Request) {
 	defer selectStatement.Close()
 
 	var hash string
+	var role string
 
-	err = selectStatement.QueryRow(reqData.Username).Scan(&hash)
+	err = selectStatement.QueryRow(reqData.Username).Scan(&hash, &role)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -92,7 +96,15 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	if dbHash == hash {
 		// generate jwt token
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, JwtClaims{Username: reqData.Username})
+		stdclaims := jwt.StandardClaims{
+			IssuedAt: time.Now().Unix(),
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, JwtClaims{
+			Username: reqData.Username,
+			Role: role,
+			StandardClaims: stdclaims,
+		})
 
 		tokenString, signingErr := token.SignedString(HMACSecret)
 
@@ -201,7 +213,7 @@ func verify(w http.ResponseWriter, r *http.Request) {
 
 		if intCount == 1 {
 			w.WriteHeader(http.StatusOK)
-			m, _ :=json.Marshal(VerifyResponse{Username: claims.Username})
+			m, _ :=json.Marshal(VerifyResponse{Username: claims.Username, Role: claims.Role})
 			w.Write(m)
 		} else {
 			w.WriteHeader(http.StatusUnauthorized)
