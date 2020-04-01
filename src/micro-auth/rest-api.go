@@ -105,7 +105,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 		// inserting Token in session table of database
 
-		insertSessionStatement, insertPrepareErr := Db.Prepare("INSERT INTO session VALUES (0, ?)")
+		insertSessionStatement, insertPrepareErr := Db.Prepare("INSERT INTO sessions VALUES (0, ?)")
 
 		if insertPrepareErr != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -173,7 +173,7 @@ func verify(w http.ResponseWriter, r *http.Request) {
 
 	if claims, ok := token.Claims.(*JwtClaims); ok && token.Valid {
 
-		selectStatement, selectErr := Db.Prepare("SELECT count(session) FROM session WHERE token = ?")
+		selectStatement, selectErr := Db.Prepare("SELECT count(sessions) FROM sessions WHERE token = ?")
 
 		if selectErr != nil {
 			w.WriteHeader(http.StatusInternalServerError)
