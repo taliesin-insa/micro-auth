@@ -244,10 +244,10 @@ func main() {
 	defer Db.Close()
 
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/", home)
-	router.HandleFunc("/login", login).Methods("POST")
+	router.HandleFunc("/auth/", home)
+	router.HandleFunc("/auth/login", login).Methods("POST")
 	//router.HandleFunc("/logout", logout).Methods("POST")
-	router.HandleFunc("/verifyToken", verify).Methods("POST")
+	router.HandleFunc("/auth/verifyToken", verify).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
