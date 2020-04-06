@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	_ "github.com/go-sql-driver/mysql"
@@ -148,25 +149,10 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func verify(w http.ResponseWriter, r *http.Request) {
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	var reqData VerifyRequest
-	unmarshalErr := json.Unmarshal(reqBody, &reqData)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
-		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
-		return
-	}
-
+func checkToken(tokenString string) (*JwtClaims, error) {
 	// XXX: the same HMAC secret is used for each signing, this may change
 
-	token, verifyErr := jwt.ParseWithClaims(reqData.Token, &JwtClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, verifyErr := jwt.ParseWithClaims(tokenString, &JwtClaims{}, func(token *jwt.Token) (interface{}, error) {
 		// Don't forget to validate the alg is what you expect:
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -176,10 +162,8 @@ func verify(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if verifyErr != nil {
-		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("[ERROR] Error while verifying JWT: %v", verifyErr.Error())
-		w.Write([]byte("[MICRO-AUTH] Could not verify token (bad input data ?)"))
-		return
+		return nil, errors.New("[MICRO-AUTH] Could not verify token (bad input data ?)")
 	}
 
 
@@ -188,17 +172,15 @@ func verify(w http.ResponseWriter, r *http.Request) {
 		selectStatement, selectErr := Db.Prepare("SELECT count(token) FROM sessions WHERE token = ?")
 
 		if selectErr != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			log.Printf("[ERROR] Error while preparing request: %v", selectErr.Error())
-			_, err = w.Write([]byte("[MICRO-AUTH] Could not prepare request"))
-			return
+			log.Printf("[ERROR] Error while preparing select request (checkToken): %v", selectErr.Error())
+			return nil, errors.New("[MICRO-AUTH] Could not prepare request")
 		}
 
 		defer selectStatement.Close()
 
 		var count string
 
-		sessionQueryErr := selectStatement.QueryRow(reqData.Token).Scan(&count)
+		sessionQueryErr := selectStatement.QueryRow(tokenString).Scan(&count)
 		intCount, sessionCountErr := strconv.Atoi(count)
 
 		if sessionCountErr != nil {
@@ -207,23 +189,101 @@ func verify(w http.ResponseWriter, r *http.Request) {
 
 		if sessionQueryErr != nil {
 			log.Printf("[ERROR] Error while querying session table: %v", selectErr.Error())
-			_, err = w.Write([]byte("[MICRO-AUTH] Could not query database for session information"))
-			return
+			return nil, errors.New("[MICRO-AUTH] Could not query database for session information")
 		}
 
 		if intCount == 1 {
-			w.WriteHeader(http.StatusOK)
-			m, _ :=json.Marshal(VerifyResponse{Username: claims.Username, Role: claims.Role})
-			w.Write(m)
+			return claims, nil
 		} else {
-			w.WriteHeader(http.StatusUnauthorized)
+			return nil, nil
 		}
 
 	} else {
-		w.WriteHeader(http.StatusUnauthorized)
+		return nil, nil
+	}
+
+}
+
+func verify(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal(err)
 		return
 	}
+
+	var reqData VerifyRequest
+	unmarshalErr := json.Unmarshal(reqBody, &reqData)
+	if unmarshalErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	claims, checkingErr := checkToken(reqData.Token)
+
+	if checkingErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(checkingErr.Error()))
+	}
+
+	m, _ :=json.Marshal(VerifyResponse{Username: claims.Username, Role: claims.Role})
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(m)
+
 }
+
+func logout(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var reqData VerifyRequest
+	unmarshalErr := json.Unmarshal(reqBody, &reqData)
+	if unmarshalErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	_, checkingErr := checkToken(reqData.Token)
+
+	if checkingErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(checkingErr.Error()))
+	}
+
+	deleteStatement, deleteErr := Db.Exec("DELETE FROM sessions WHERE token = ?", reqData.Token)
+
+	if deleteErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Error while executing delete (logout) : %v", deleteErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Could not delete token from database"))
+		return
+	}
+
+	count, rowsAffectedErr := deleteStatement.RowsAffected()
+
+	if rowsAffectedErr != nil {
+		panic("[PANIC] Error while querying rows affected by delete request (logout)")
+	}
+
+	if count == 1 {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Rows Affected by delete token statement different to 1")
+		w.Write([]byte("[MICRO-AUTH] Could not delete token from database"))
+		return
+	}
+
+
+}
+
 
 func main() {
 
@@ -258,7 +318,7 @@ func main() {
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/auth/", home)
 	router.HandleFunc("/auth/login", login).Methods("POST")
-	//router.HandleFunc("/logout", logout).Methods("POST")
+	router.HandleFunc("/auth/logout", logout).Methods("POST")
 	router.HandleFunc("/auth/verifyToken", verify).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":8080", router))
