@@ -29,13 +29,25 @@ type VerifyRequest struct {
 	Token  string
 }
 
+type AccountCreationRequest struct {
+	Username   string
+	Password   string
+	Role       string
+	AdminToken string
+}
+
+type AccountDeletionRequest struct {
+	Username   string
+	AdminToken string
+}
+
 type JwtClaims struct {
 	Username  string
 	Role string
 	jwt.StandardClaims
 }
 
-type VerifyResponse struct {
+type AccountData struct {
 	Username  string
 	Role string
 }
@@ -227,12 +239,123 @@ func verify(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(checkingErr.Error()))
 	}
 
-	m, _ :=json.Marshal(VerifyResponse{Username: claims.Username, Role: claims.Role})
+	m, _ :=json.Marshal(AccountData{Username: claims.Username, Role: claims.Role})
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(m)
 
 }
+
+func createAccount(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var reqData AccountCreationRequest
+	unmarshalErr := json.Unmarshal(reqBody, &reqData)
+	if unmarshalErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	claims, checkingErr := checkToken(reqData.AdminToken)
+
+	if checkingErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(checkingErr.Error()))
+	}
+
+	if claims.Role != "0" { // Creator needs to be administrator
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to create an account"))
+	}
+
+	insertSessionStatement, insertPrepareErr := Db.Prepare("INSERT INTO users VALUES (?,?,?)")
+
+	if insertPrepareErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Error while preparing INSERT of user data : %v", insertPrepareErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Error while writing new user data to database"))
+		return
+	}
+
+	defer insertSessionStatement.Close()
+
+	insertRes, insertExecErr := insertSessionStatement.Exec(reqData.Username, reqData.Password, reqData.Password)
+	insertedRows, _ := insertRes.RowsAffected()
+
+	if insertExecErr != nil || insertedRows != 1 {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Error while executing INSERT of user data : %v", insertExecErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Error while writing new user data to database"))
+		return
+	}
+
+	m, _ :=json.Marshal(AccountData{Username: reqData.Username, Role: reqData.Role})
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(m)
+}
+
+
+func deleteAccount(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var reqData AccountDeletionRequest
+	unmarshalErr := json.Unmarshal(reqBody, &reqData)
+	if unmarshalErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	claims, checkingErr := checkToken(reqData.AdminToken)
+
+	if checkingErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(checkingErr.Error()))
+	}
+
+	if claims.Role != "0" { // Creator needs to be administrator
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to delete an account"))
+	}
+
+	deleteStatement, deleteErr := Db.Exec("DELETE FROM users WHERE username = ?", reqData.Username)
+
+	if deleteErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Error while executing delete (deleteAccount) : %v", deleteErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Could not delete user from database"))
+		return
+	}
+
+	count, rowsAffectedErr := deleteStatement.RowsAffected()
+
+	if rowsAffectedErr != nil {
+		panic("[PANIC] Error while querying rows affected by delete request (logout)")
+	}
+
+	if count == 1 {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Rows Affected by delete user statement different to 1")
+		w.Write([]byte("[MICRO-AUTH] Could not delete user from database"))
+		return
+	}
+
+}
+
 
 func logout(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := ioutil.ReadAll(r.Body)
@@ -319,6 +442,8 @@ func main() {
 	router.HandleFunc("/auth/", home)
 	router.HandleFunc("/auth/login", login).Methods("POST")
 	router.HandleFunc("/auth/logout", logout).Methods("POST")
+	router.HandleFunc("/auth/account/create", createAccount).Methods("POST")
+	router.HandleFunc("/auth/account/delete", deleteAccount).Methods("DELETE")
 	router.HandleFunc("/auth/verifyToken", verify).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":8080", router))
