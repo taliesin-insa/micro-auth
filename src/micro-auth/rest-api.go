@@ -519,7 +519,7 @@ func main() {
 	router.HandleFunc("/auth/logout", logout).Methods("POST")
 	router.HandleFunc("/auth/account/list", listAccounts).Methods("POST")
 	router.HandleFunc("/auth/account/create", createAccount).Methods("POST")
-	router.HandleFunc("/auth/account/delete", deleteAccount).Methods("DELETE")
+	router.HandleFunc("/auth/account/delete", deleteAccount).Methods("POST")
 	router.HandleFunc("/auth/verifyToken", verify).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":8080", router))
