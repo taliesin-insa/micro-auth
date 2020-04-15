@@ -285,7 +285,8 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 
 	defer insertSessionStatement.Close()
 
-	insertRes, insertExecErr := insertSessionStatement.Exec(reqData.Username, reqData.Password, reqData.Password)
+	hashedPassword := fmt.Sprintf("%x", sha256.Sum256([]byte(reqData.Password)))
+	insertRes, insertExecErr := insertSessionStatement.Exec(reqData.Username, hashedPassword, reqData.Role)
 	insertedRows, _ := insertRes.RowsAffected()
 
 	if insertExecErr != nil || insertedRows != 1 {
