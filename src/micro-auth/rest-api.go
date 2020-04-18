@@ -161,7 +161,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func checkToken(tokenString string) (*JwtClaims, error) {
+func checkToken(tokenString string) (*JwtClaims, error, int) {
 	// XXX: the same HMAC secret is used for each signing, this may change
 
 	token, verifyErr := jwt.ParseWithClaims(tokenString, &JwtClaims{}, func(token *jwt.Token) (interface{}, error) {
@@ -175,7 +175,7 @@ func checkToken(tokenString string) (*JwtClaims, error) {
 
 	if verifyErr != nil {
 		log.Printf("[ERROR] Error while verifying JWT: %v", verifyErr.Error())
-		return nil, errors.New("[MICRO-AUTH] Could not verify token (bad input data ?)")
+		return nil, errors.New("[MICRO-AUTH] Could not verify token (bad input data ?)"), http.StatusBadRequest
 	}
 
 
@@ -185,7 +185,7 @@ func checkToken(tokenString string) (*JwtClaims, error) {
 
 		if selectErr != nil {
 			log.Printf("[ERROR] Error while preparing select request (checkToken): %v", selectErr.Error())
-			return nil, errors.New("[MICRO-AUTH] Could not prepare request")
+			return nil, errors.New("[MICRO-AUTH] Could not prepare request"), http.StatusInternalServerError
 		}
 
 		defer selectStatement.Close()
@@ -201,17 +201,17 @@ func checkToken(tokenString string) (*JwtClaims, error) {
 
 		if sessionQueryErr != nil {
 			log.Printf("[ERROR] Error while querying session table: %v", selectErr.Error())
-			return nil, errors.New("[MICRO-AUTH] Could not query database for session information")
+			return nil, errors.New("[MICRO-AUTH] Could not query database for session information"), http.StatusInternalServerError
 		}
 
 		if intCount == 1 {
-			return claims, nil
+			return claims, nil, http.StatusOK
 		} else {
-			return nil, nil
+			return nil, nil, http.StatusUnauthorized
 		}
 
 	} else {
-		return nil, nil
+		return nil, nil, http.StatusUnauthorized
 	}
 
 }
@@ -232,11 +232,12 @@ func verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, checkingErr := checkToken(reqData.Token)
+	claims, checkingErr, statusCode := checkToken(reqData.Token)
 
 	if checkingErr != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(statusCode)
 		w.Write([]byte(checkingErr.Error()))
+		return
 	}
 
 	m, _ :=json.Marshal(AccountData{Username: claims.Username, Role: claims.Role})
@@ -262,16 +263,18 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, checkingErr := checkToken(reqData.AdminToken)
+	claims, checkingErr, statusCode := checkToken(reqData.AdminToken)
 
 	if checkingErr != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(statusCode)
 		w.Write([]byte(checkingErr.Error()))
+		return
 	}
 
 	if claims.Role != "0" { // Creator needs to be administrator
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to create an account"))
+		return
 	}
 
 	insertSessionStatement, insertPrepareErr := Db.Prepare("INSERT INTO users VALUES (?,?,?)")
@@ -318,16 +321,18 @@ func listAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, checkingErr := checkToken(reqData.Token)
+	claims, checkingErr, statusCode := checkToken(reqData.Token)
 
 	if checkingErr != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(statusCode)
 		w.Write([]byte(checkingErr.Error()))
+		return
 	}
 
 	if claims.Role != "0" { // Creator needs to be administrator
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to list accounts"))
+		return
 	}
 
 	selectStatement, selectErr := Db.Prepare("SELECT username, role FROM users")
@@ -393,16 +398,18 @@ func deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, checkingErr := checkToken(reqData.AdminToken)
+	claims, checkingErr, statusCode := checkToken(reqData.AdminToken)
 
 	if checkingErr != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(statusCode)
 		w.Write([]byte(checkingErr.Error()))
+		return
 	}
 
 	if claims.Role != "0" { // Creator needs to be administrator
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to delete an account"))
+		return
 	}
 
 	deleteStatement, deleteErr := Db.Exec("DELETE FROM users WHERE username = ?", reqData.Username)
@@ -448,10 +455,10 @@ func logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, checkingErr := checkToken(reqData.Token)
+	_, checkingErr, statusCode := checkToken(reqData.Token)
 
 	if checkingErr != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(statusCode)
 		w.Write([]byte(checkingErr.Error()))
 	}
 
