@@ -20,6 +20,11 @@ import (
 var Db *sql.DB
 var HMACSecret []byte
 
+const (
+	RoleAdmin = iota
+	RoleAnnotator = iota
+)
+
 type AuthRequest struct {
 	Username  string
 	Password  string
@@ -32,7 +37,7 @@ type VerifyRequest struct {
 type AccountCreationRequest struct {
 	Username   string
 	Password   string
-	Role       string
+	Role       int
 	AdminToken string
 }
 
@@ -43,13 +48,13 @@ type AccountDeletionRequest struct {
 
 type JwtClaims struct {
 	Username  string
-	Role string
+	Role 	  int
 	jwt.StandardClaims
 }
 
 type AccountData struct {
 	Username  string
-	Role string
+	Role	  int
 }
 
 type AuthResponse struct {
@@ -95,7 +100,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	defer selectStatement.Close()
 
 	var hash string
-	var role string
+	var role int
 
 	err = selectStatement.QueryRow(reqData.Username).Scan(&hash, &role)
 	if err != nil {
@@ -271,7 +276,7 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if claims.Role != "0" { // Creator needs to be administrator
+	if claims.Role != RoleAdmin { // Creator needs to be administrator
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to create an account"))
 		return
@@ -329,7 +334,7 @@ func listAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if claims.Role != "0" { // Creator needs to be administrator
+	if claims.Role != RoleAdmin { // Creator needs to be administrator
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to list accounts"))
 		return
@@ -360,7 +365,7 @@ func listAccounts(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 
 		var username string
-		var role string
+		var role int
 
 		if err := rows.Scan(&username, &role); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -406,7 +411,7 @@ func deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if claims.Role != "0" { // Creator needs to be administrator
+	if claims.Role != RoleAdmin { // Creator needs to be administrator
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to delete an account"))
 		return
