@@ -59,6 +59,7 @@ type AccountData struct {
 
 type AuthResponse struct {
 	Username  string
+	Role int
 	Token string
 }
 
@@ -158,7 +159,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 
 		w.WriteHeader(http.StatusOK)
-		m, _ :=json.Marshal(AuthResponse{Username:reqData.Username, Token:tokenString})
+		m, _ :=json.Marshal(AuthResponse{Username:reqData.Username, Role: role, Token:tokenString})
 		w.Write(m)
 	} else {
 		w.WriteHeader(http.StatusUnauthorized)
