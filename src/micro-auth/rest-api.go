@@ -41,6 +41,12 @@ type AccountCreationRequest struct {
 	AdminToken string
 }
 
+type AccountModifyRequest struct {
+	Username   string
+	Role       int
+	AdminToken string
+}
+
 type AccountDeletionRequest struct {
 	Username   string
 	AdminToken string
@@ -311,6 +317,64 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 	w.Write(m)
 }
 
+func modifyAccount(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var reqData AccountModifyRequest
+	unmarshalErr := json.Unmarshal(reqBody, &reqData)
+	if unmarshalErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	claims, checkingErr, statusCode := checkToken(reqData.AdminToken)
+
+	if checkingErr != nil {
+		w.WriteHeader(statusCode)
+		w.Write([]byte(checkingErr.Error()))
+		return
+	}
+
+	if claims.Role != RoleAdmin { // Modification needs to be made by an administrator
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to modify an account"))
+		return
+	}
+
+	modifyUserStatement, modifyErr := Db.Prepare("UPDATE users SET role = ? WHERE username = ?")
+
+	if modifyErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Error while preparing UPDATE of user data : %v", modifyErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Error while modifying user data on database"))
+		return
+	}
+
+	defer modifyUserStatement.Close()
+
+	modifyRes, modifyExecErr := modifyUserStatement.Exec(reqData.Role, reqData.Username)
+	insertedRows, _ := modifyRes.RowsAffected()
+
+	if modifyExecErr != nil || insertedRows != 1 {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Error while executing INSERT of user data : %v", modifyExecErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Error while modifying user data on database"))
+		return
+	}
+
+	m, _ :=json.Marshal(AccountData{Username: reqData.Username, Role: reqData.Role})
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(m)
+}
+
+
 func listAccounts(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -532,6 +596,7 @@ func main() {
 	router.HandleFunc("/auth/logout", logout).Methods("POST")
 	router.HandleFunc("/auth/account/list", listAccounts).Methods("POST")
 	router.HandleFunc("/auth/account/create", createAccount).Methods("POST")
+	router.HandleFunc("/auth/account/modify", modifyAccount).Methods("POST")
 	router.HandleFunc("/auth/account/delete", deleteAccount).Methods("POST")
 	router.HandleFunc("/auth/verifyToken", verify).Methods("POST")
 
