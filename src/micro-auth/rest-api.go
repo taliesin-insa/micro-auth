@@ -449,10 +449,9 @@ func modifyAccount(w http.ResponseWriter, r *http.Request) {
 
 	defer modifyUserStatement.Close()
 
-	modifyRes, modifyExecErr := modifyUserStatement.Exec(reqData.Role, reqData.Email, reqData.Username)
-	insertedRows, _ := modifyRes.RowsAffected()
+	_, modifyExecErr := modifyUserStatement.Exec(reqData.Role, reqData.Email, reqData.Username)
 
-	if modifyExecErr != nil || insertedRows != 1 {
+	if modifyExecErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("[ERROR] Error while executing INSERT of user data : %v", modifyExecErr.Error())
 		w.Write([]byte("[MICRO-AUTH] Error while modifying user data on database"))
