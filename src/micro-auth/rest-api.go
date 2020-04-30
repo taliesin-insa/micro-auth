@@ -35,16 +35,18 @@ type VerifyRequest struct {
 }
 
 type AccountCreationRequest struct {
-	Username   string
-	Password   string
-	Role       int
-	AdminToken string
+	Username   	string
+	Password   	string
+	Role       	int
+	Email		string
+	AdminToken 	string
 }
 
 type AccountModifyRequest struct {
-	Username   string
-	Role       int
-	AdminToken string
+	Username   	string
+	Email		string
+	Role       	int
+	AdminToken 	string
 }
 
 type AccountDeletionRequest struct {
@@ -54,19 +56,22 @@ type AccountDeletionRequest struct {
 
 type JwtClaims struct {
 	Username  string
+	Email	  string
 	Role 	  int
 	jwt.StandardClaims
 }
 
 type AccountData struct {
-	Username  string
-	Role	  int
+	Username  	string
+	Email		string
+	Role	  	int
 }
 
 type AuthResponse struct {
-	Username  string
-	Role int
-	Token string
+	Username	string
+	Email 		string
+	Role		int
+	Token		string
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +100,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 
 
-	selectStatement, selectErr := Db.Prepare("SELECT password, role FROM users WHERE username = ?")
+	selectStatement, selectErr := Db.Prepare("SELECT email, password, role FROM users WHERE username = ?")
 
 	if selectErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -108,8 +113,9 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	var hash string
 	var role int
+	var email string
 
-	err = selectStatement.QueryRow(reqData.Username).Scan(&hash, &role)
+	err = selectStatement.QueryRow(reqData.Username).Scan(&email, &hash, &role)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -128,6 +134,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, JwtClaims{
 			Username: reqData.Username,
 			Role: role,
+			Email: email,
 			StandardClaims: stdclaims,
 		})
 
@@ -165,7 +172,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 
 		w.WriteHeader(http.StatusOK)
-		m, _ :=json.Marshal(AuthResponse{Username:reqData.Username, Role: role, Token:tokenString})
+		m, _ :=json.Marshal(AuthResponse{Username:reqData.Username, Email: email, Role: role, Token:tokenString})
 		w.Write(m)
 	} else {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -252,7 +259,7 @@ func verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, _ :=json.Marshal(AccountData{Username: claims.Username, Role: claims.Role})
+	m, _ :=json.Marshal(AccountData{Username: claims.Username, Email: claims.Email, Role: claims.Role})
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(m)
@@ -289,7 +296,9 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	insertSessionStatement, insertPrepareErr := Db.Prepare("INSERT INTO users VALUES (?,?,?)")
+	// TODO: more checks on validity (email & password non empty)
+
+	insertSessionStatement, insertPrepareErr := Db.Prepare("INSERT INTO users VALUES (?,?,?,?)")
 
 	if insertPrepareErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -301,7 +310,7 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 	defer insertSessionStatement.Close()
 
 	hashedPassword := fmt.Sprintf("%x", sha256.Sum256([]byte(reqData.Password)))
-	insertRes, insertExecErr := insertSessionStatement.Exec(reqData.Username, hashedPassword, reqData.Role)
+	insertRes, insertExecErr := insertSessionStatement.Exec(reqData.Username, hashedPassword, reqData.Role, reqData.Email)
 	insertedRows, _ := insertRes.RowsAffected()
 
 	if insertExecErr != nil || insertedRows != 1 {
@@ -311,7 +320,7 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, _ :=json.Marshal(AccountData{Username: reqData.Username, Role: reqData.Role})
+	m, _ :=json.Marshal(AccountData{Username: reqData.Username, Email: reqData.Email, Role: reqData.Role})
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(m)
@@ -347,7 +356,7 @@ func modifyAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	modifyUserStatement, modifyErr := Db.Prepare("UPDATE users SET role = ? WHERE username = ?")
+	modifyUserStatement, modifyErr := Db.Prepare("UPDATE users SET role = ?, email = ? WHERE username = ?")
 
 	if modifyErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -358,7 +367,7 @@ func modifyAccount(w http.ResponseWriter, r *http.Request) {
 
 	defer modifyUserStatement.Close()
 
-	modifyRes, modifyExecErr := modifyUserStatement.Exec(reqData.Role, reqData.Username)
+	modifyRes, modifyExecErr := modifyUserStatement.Exec(reqData.Role, reqData.Email, reqData.Username)
 	insertedRows, _ := modifyRes.RowsAffected()
 
 	if modifyExecErr != nil || insertedRows != 1 {
@@ -368,7 +377,7 @@ func modifyAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, _ :=json.Marshal(AccountData{Username: reqData.Username, Role: reqData.Role})
+	m, _ :=json.Marshal(AccountData{Username: reqData.Username, Email: reqData.Email, Role: reqData.Role})
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(m)
@@ -405,7 +414,7 @@ func listAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	selectStatement, selectErr := Db.Prepare("SELECT username, role FROM users")
+	selectStatement, selectErr := Db.Prepare("SELECT username, email, role FROM users")
 
 	if selectErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -430,9 +439,10 @@ func listAccounts(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 
 		var username string
+		var email string
 		var role int
 
-		if err := rows.Scan(&username, &role); err != nil {
+		if err := rows.Scan(&username, &email, &role); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Printf("[ERROR] Error while scanning row (listAccounts): %v", queryErr.Error())
 			w.Write([]byte("[MICRO-AUTH] Could not read database"))
@@ -441,6 +451,7 @@ func listAccounts(w http.ResponseWriter, r *http.Request) {
 
 		accounts = append(accounts, AccountData{
 			Username: username,
+			Email: email,
 			Role:     role,
 		})
 
