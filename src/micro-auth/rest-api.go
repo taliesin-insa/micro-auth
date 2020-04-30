@@ -80,7 +80,7 @@ func home(w http.ResponseWriter, r *http.Request) {
 
 // CREATE DATABASE taliesin;
 // CREATE DATABASE taliesin_dev;
-// CREATE TABLE users(username varchar(100), password varchar(255), role int, primary key(username));
+// CREATE TABLE users(username varchar(100), password varchar(255), role int, email varchar(255), primary key(username));
 // CREATE TABLE sessions(id int not null auto_increment, token varchar(256), primary key(id));
 func login(w http.ResponseWriter, r *http.Request) {
 
@@ -118,6 +118,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	err = selectStatement.QueryRow(reqData.Username).Scan(&email, &hash, &role)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
+		log.Printf("%v", err)
 		return
 	}
 
