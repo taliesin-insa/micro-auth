@@ -283,7 +283,7 @@ func checkIfAccountExist(username string, email string) (error, int) {
 	intCount, sessionCountErr := strconv.Atoi(count)
 
 	if sessionCountErr != nil {
-		panic("[PANIC] unexpected value received from count(accounts)")
+		panic("[PANIC] unexpected value received from checkIfAccountExist")
 	}
 
 	if sessionQueryErr != nil {
@@ -298,6 +298,39 @@ func checkIfAccountExist(username string, email string) (error, int) {
 	}
 
 }
+
+func checkIfEmailExist(username string, email string) (error, int) {
+	selectStatement, selectErr := Db.Prepare("SELECT count(username) FROM users WHERE username != ? AND email = ?")
+
+	if selectErr != nil {
+		log.Printf("[ERROR] Error while preparing select request (checkIfEmailExist): %v", selectErr.Error())
+		return errors.New("[MICRO-AUTH] Could not prepare request"), http.StatusInternalServerError
+	}
+
+	defer selectStatement.Close()
+
+	var count string
+
+	sessionQueryErr := selectStatement.QueryRow(username, email).Scan(&count)
+	intCount, sessionCountErr := strconv.Atoi(count)
+
+	if sessionCountErr != nil {
+		panic("[PANIC] unexpected value received from checkIfEmailExist")
+	}
+
+	if sessionQueryErr != nil {
+		log.Printf("[ERROR] Error while querying session users: %v", selectErr.Error())
+		return errors.New("[MICRO-AUTH] Could not query database (checkIfEmailExist)"), http.StatusInternalServerError
+	}
+
+	if intCount == 0 {
+		return nil, http.StatusOK
+	} else {
+		return errors.New("[MICRO-AUTH] Email already exists"), http.StatusUnauthorized
+	}
+
+}
+
 
 func createAccount(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := ioutil.ReadAll(r.Body)
@@ -380,6 +413,14 @@ func modifyAccount(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
 		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	existErr, existStatusCode := checkIfEmailExist(reqData.Username, reqData.Email)
+
+	if existErr != nil {
+		w.WriteHeader(existStatusCode)
+		w.Write([]byte(existErr.Error()))
 		return
 	}
 
