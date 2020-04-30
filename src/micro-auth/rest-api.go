@@ -397,6 +397,14 @@ func modifyAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	existErr, existStatusCode := checkIfAccountExist(reqData.Username, reqData.Email)
+
+	if existErr != nil {
+		w.WriteHeader(existStatusCode)
+		w.Write([]byte(existErr.Error()))
+		return
+	}
+
 	modifyUserStatement, modifyErr := Db.Prepare("UPDATE users SET role = ?, email = ? WHERE username = ?")
 
 	if modifyErr != nil {
