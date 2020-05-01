@@ -526,7 +526,8 @@ func modifyPassword(w http.ResponseWriter, r *http.Request) {
 
 		defer modifyUserStatement.Close()
 
-		_, modifyExecErr := modifyUserStatement.Exec(reqData.NewPassword, reqData.Username)
+		newDbHash := fmt.Sprintf("%x", sha256.Sum256([]byte(reqData.NewPassword)))
+		_, modifyExecErr := modifyUserStatement.Exec(newDbHash, reqData.Username)
 
 		if modifyExecErr != nil {
 			w.WriteHeader(http.StatusInternalServerError)
