@@ -25,29 +25,57 @@ const (
 	RoleAnnotator = iota
 )
 
+type AccountData struct {
+	Username	string
+	Email		string
+	Role		int
+}
+
+func (r AccountData) isValid() bool {
+	return r.Username != "" && r.Email != "" && r.Role >= 0 && r.Role <= 1
+}
+
+
 type AuthRequest struct {
 	Username  string
 	Password  string
+}
+
+func (r AuthRequest) isValid() bool {
+	return r.Username != "" && r.Password != ""
 }
 
 type VerifyRequest struct {
 	Token  string
 }
 
-type AccountCreationRequest struct {
-	Username   	string
-	Password   	string
-	Role       	int
-	Email		string
-	AdminToken 	string
+func (r VerifyRequest) isValid() bool {
+	return r.Token != ""
 }
 
-type AccountModifyRequest struct {
-	Username   	string
-	Email		string
-	Role       	int
+
+type AccountCreationRequest struct {
 	AdminToken 	string
+	Username	string
+	Email		string
+	Role		int
+	Password 	string
 }
+
+func (r AccountCreationRequest) isValid() bool {
+	return r.AdminToken != "" && r.Username != "" && r.Email != "" && r.Role >= 0 && r.Role <= 1 && r.Password != ""
+}
+
+
+type AccountModifyRequest struct {
+	AdminToken 	string
+	AccountData
+}
+
+func (r AccountModifyRequest) isValid() bool {
+	return r.AdminToken != "" && r.AccountData.isValid()
+}
+
 
 type PasswordModifyRequest struct {
 	Username  string
@@ -55,22 +83,26 @@ type PasswordModifyRequest struct {
 	NewPassword  string
 }
 
+func (r PasswordModifyRequest) isValid() bool {
+	return r.Username != "" && r.NewPassword != "" && r.OldPassword != ""
+}
+
+
 type AccountDeletionRequest struct {
 	Username   string
 	AdminToken string
 }
 
-type JwtClaims struct {
-	Username  string
-	Email	  string
-	Role 	  int
-	jwt.StandardClaims
+func (r AccountDeletionRequest) isValid() bool {
+	return r.AdminToken != "" && r.Username != ""
 }
 
-type AccountData struct {
-	Username  	string
-	Email		string
-	Role	  	int
+
+type JwtClaims struct {
+	Username	string
+	Email 		string
+	Role		int
+	jwt.StandardClaims
 }
 
 type AuthResponse struct {
@@ -79,6 +111,7 @@ type AuthResponse struct {
 	Role		int
 	Token		string
 }
+
 
 func home(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "you're talking to the auth microservice")
@@ -105,6 +138,11 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !reqData.isValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format, validation failed"))
+		return
+	}
 
 	selectStatement, selectErr := Db.Prepare("SELECT email, password, role FROM users WHERE username = ?")
 
@@ -258,6 +296,12 @@ func verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !reqData.isValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format, validation failed"))
+		return
+	}
+
 	claims, checkingErr, statusCode := checkToken(reqData.Token)
 
 	if checkingErr != nil {
@@ -355,6 +399,12 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !reqData.isValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format, validation failed"))
+		return
+	}
+
 	existErr, existStatusCode := checkIfAccountExist(reqData.Username, reqData.Email)
 
 	if existErr != nil {
@@ -423,6 +473,12 @@ func modifyAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !reqData.isValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format, validation failed"))
+		return
+	}
+
 	existErr, existStatusCode := checkIfEmailExist(reqData.Username, reqData.Email)
 
 	if existErr != nil {
@@ -484,6 +540,12 @@ func modifyPassword(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
 		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	if !reqData.isValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format, validation failed"))
 		return
 	}
 
@@ -556,6 +618,12 @@ func listAccounts(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
 		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	if !reqData.isValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format, validation failed"))
 		return
 	}
 
@@ -638,6 +706,12 @@ func deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !reqData.isValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format, validation failed"))
+		return
+	}
+
 	claims, checkingErr, statusCode := checkToken(reqData.AdminToken)
 
 	if checkingErr != nil {
@@ -692,6 +766,12 @@ func logout(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
 		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	if !reqData.isValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err = w.Write([]byte("[MICRO-AUTH] Wrong request body format, validation failed"))
 		return
 	}
 
