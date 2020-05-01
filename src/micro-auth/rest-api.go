@@ -49,6 +49,12 @@ type AccountModifyRequest struct {
 	AdminToken 	string
 }
 
+type PasswordModifyRequest struct {
+	Username  string
+	OldPassword  string
+	NewPassword  string
+}
+
 type AccountDeletionRequest struct {
 	Username   string
 	AdminToken string
@@ -332,6 +338,7 @@ func checkIfEmailExist(username string, email string) (error, int) {
 }
 
 
+
 func createAccount(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -464,6 +471,76 @@ func modifyAccount(w http.ResponseWriter, r *http.Request) {
 	w.Write(m)
 }
 
+func modifyPassword(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var reqData PasswordModifyRequest
+	unmarshalErr := json.Unmarshal(reqBody, &reqData)
+	if unmarshalErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[ERROR] Unmarshal request json failed: %v", unmarshalErr.Error())
+		w.Write([]byte("[MICRO-AUTH] Wrong request body format"))
+		return
+	}
+
+	// No token verification is done here because we check directly the password
+
+	selectStatement, selectErr := Db.Prepare("SELECT password FROM users WHERE username = ?")
+
+	if selectErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("[ERROR] Error while preparing request: %v", selectErr.Error())
+		_, err = w.Write([]byte("[MICRO-AUTH] Could not prepare request"))
+		return
+	}
+
+	defer selectStatement.Close()
+
+	var hash string
+
+	err = selectStatement.QueryRow(reqData.Username).Scan(&hash)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		log.Printf("%v", err)
+		return
+	}
+
+	// verify that sha256(provided password) = database hash
+
+	dbHash := fmt.Sprintf("%x", sha256.Sum256([]byte(reqData.OldPassword)))
+
+	if dbHash == hash {
+
+		modifyUserStatement, modifyErr := Db.Prepare("UPDATE users SET password = ? WHERE username = ?")
+
+		if modifyErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("[ERROR] Error while preparing UPDATE of user password : %v", modifyErr.Error())
+			w.Write([]byte("[MICRO-AUTH] Error while modifying user password on database"))
+			return
+		}
+
+		defer modifyUserStatement.Close()
+
+		_, modifyExecErr := modifyUserStatement.Exec(reqData.NewPassword, reqData.Username)
+
+		if modifyExecErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("[ERROR] Error while executing UPDATE of user password : %v", modifyExecErr.Error())
+			w.Write([]byte("[MICRO-AUTH] Error while modifying user password on database"))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+}
 
 func listAccounts(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := ioutil.ReadAll(r.Body)
@@ -689,6 +766,7 @@ func main() {
 	router.HandleFunc("/auth/account/list", listAccounts).Methods("POST")
 	router.HandleFunc("/auth/account/create", createAccount).Methods("POST")
 	router.HandleFunc("/auth/account/modify", modifyAccount).Methods("POST")
+	router.HandleFunc("/auth/account/modifyPassword", modifyPassword).Methods("POST")
 	router.HandleFunc("/auth/account/delete", deleteAccount).Methods("POST")
 	router.HandleFunc("/auth/verifyToken", verify).Methods("POST")
 
