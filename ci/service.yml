@@ -3,11 +3,14 @@ kind: Service
 metadata:
   name: auth-api
   namespace: gitlab-managed-apps
+  labels:
+    app: auth
 spec:
   selector:
     app: auth
   ports:
-    - protocol: TCP
+    - name: api
+      protocol: TCP
       port: 8080
       targetPort: 8080
 ---
@@ -16,10 +19,13 @@ kind: Service
 metadata:
   name: auth-api-dev
   namespace: gitlab-managed-apps
+  labels:
+    app: auth-dev
 spec:
   selector:
     app: auth-dev
   ports:
-    - protocol: TCP
+    - name: api
+      protocol: TCP
       port: 8080
       targetPort: 8080

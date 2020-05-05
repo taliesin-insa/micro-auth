@@ -1,7 +1,5 @@
 # https://sanderknape.com/2019/02/automated-deployments-kubernetes-gitlab/
 image: docker:latest
-services:
-  - docker:dind
 
 stages:
   - build
@@ -31,9 +29,8 @@ dev:
     - kubectl config set-credentials gitlab --token="${USER_TOKEN}"
     - kubectl config set-context default --cluster=k8s --user=gitlab
     - kubectl config use-context default
-    - kubectl apply -f deployment.yml
-    - kubectl apply -f service.yml
-    - kubectl set image deployment/auth-dev auth-dev=${CONTAINER_IMAGE_SHA} --record -n gitlab-managed-apps
+    - kubectl apply -f ci/
+    - kubectl rollout restart deployment/auth-dev -n gitlab-managed-apps
 
 production:
   stage: production
@@ -48,6 +45,5 @@ production:
     - kubectl config set-credentials gitlab --token="${USER_TOKEN}"
     - kubectl config set-context default --cluster=k8s --user=gitlab
     - kubectl config use-context default
-    - kubectl apply -f deployment.yml
-    - kubectl apply -f service.yml
-    - kubectl set image deployment/auth auth=${CONTAINER_IMAGE_SHA} --record -n gitlab-managed-apps
+    - kubectl apply -f ci/
+    - kubectl rollout restart deployment/auth -n gitlab-managed-apps

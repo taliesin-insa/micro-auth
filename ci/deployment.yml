@@ -38,6 +38,9 @@ spec:
                 secretKeyRef:
                   name: auth-hmac-secrets
                   key: secret
+          resources:
+            requests:
+              cpu: "100m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -80,3 +83,6 @@ spec:
                 secretKeyRef:
                   name: auth-hmac-secrets
                   key: secret
+          resources:
+            requests:
+              cpu: "75m"

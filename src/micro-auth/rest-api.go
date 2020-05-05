@@ -9,6 +9,9 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -19,6 +22,19 @@ import (
 
 var Db *sql.DB
 var HMACSecret []byte
+
+var (
+	httpRequestsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "Number of HTTP requests processed by the microservice",
+	})
+
+	authentifiedUsersTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "auth_users_total",
+		Help: "Number of users with a session currently opened",
+	})
+
+)
 
 const (
 	RoleAdmin = iota
@@ -123,6 +139,8 @@ func home(w http.ResponseWriter, r *http.Request) {
 // CREATE TABLE sessions(id int not null auto_increment, token varchar(256), primary key(id));
 func login(w http.ResponseWriter, r *http.Request) {
 
+	httpRequestsTotal.Inc()
+
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal(err)
@@ -215,6 +233,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		authentifiedUsersTotal.Inc()
 
 		w.WriteHeader(http.StatusOK)
 		m, _ :=json.Marshal(AuthResponse{Username:reqData.Username, Email: email, Role: role, Token:tokenString})
@@ -281,6 +300,8 @@ func checkToken(tokenString string) (*JwtClaims, error, int) {
 }
 
 func verify(w http.ResponseWriter, r *http.Request) {
+	httpRequestsTotal.Inc()
+
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal(err)
@@ -384,6 +405,8 @@ func checkIfEmailExist(username string, email string) (error, int) {
 
 
 func createAccount(w http.ResponseWriter, r *http.Request) {
+	httpRequestsTotal.Inc()
+
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal(err)
@@ -458,6 +481,8 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func modifyAccount(w http.ResponseWriter, r *http.Request) {
+	httpRequestsTotal.Inc()
+
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal(err)
@@ -528,6 +553,8 @@ func modifyAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func modifyPassword(w http.ResponseWriter, r *http.Request) {
+	httpRequestsTotal.Inc()
+
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal(err)
@@ -606,6 +633,8 @@ func modifyPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func listAccounts(w http.ResponseWriter, r *http.Request) {
+	httpRequestsTotal.Inc()
+
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal(err)
@@ -691,6 +720,8 @@ func listAccounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteAccount(w http.ResponseWriter, r *http.Request) {
+	httpRequestsTotal.Inc()
+
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal(err)
@@ -754,6 +785,8 @@ func deleteAccount(w http.ResponseWriter, r *http.Request) {
 
 
 func logout(w http.ResponseWriter, r *http.Request) {
+	httpRequestsTotal.Inc()
+
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal(err)
@@ -798,6 +831,7 @@ func logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if count == 1 {
+		authentifiedUsersTotal.Desc()
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -841,6 +875,10 @@ func main() {
 	defer Db.Close()
 
 	router := mux.NewRouter().StrictSlash(true)
+
+	// metrics route for monitoring
+	router.Path("/metrics").Handler(promhttp.Handler())
+
 	router.HandleFunc("/auth/", home)
 	router.HandleFunc("/auth/login", login).Methods("POST")
 	router.HandleFunc("/auth/logout", logout).Methods("POST")
