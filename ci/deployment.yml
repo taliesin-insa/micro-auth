@@ -23,6 +23,7 @@ spec:
       containers:
         - name: auth
           image: clyde.local:5005/taliesin/micro-auth/master:prod
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
