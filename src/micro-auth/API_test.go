@@ -15,8 +15,8 @@ import (
 
 func setupMockDbData() {
 	_, insertErr := Db.Exec("INSERT INTO users VALUES" +
-		"('admin','8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918','0','admin@root.fr'), " +
-		"('user','04f8996da763b7a969b1028ee3007569eaf3a635486ddab211d512c85b9df8fb','1','user@root.fr')")
+		"('admin','8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', 0,'admin@root.fr'), " +
+		"('user','04f8996da763b7a969b1028ee3007569eaf3a635486ddab211d512c85b9df8fb', 1,'user@root.fr')")
 
 	if insertErr != nil {
 		panic(insertErr.Error())
@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 
 }
 
-func TestSuccessfulConnect(t *testing.T) {
+func TestSuccessfulLogin(t *testing.T) {
 	requestPayload := AuthRequest{
 		Username: "admin",
 		Password: "admin",
@@ -80,4 +80,60 @@ func TestSuccessfulConnect(t *testing.T) {
 	login(recorder, request)
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
+	responseBody := recorder.Body.Bytes()
+	response := AuthResponse{}
+
+	json.Unmarshal(responseBody, &response)
+
+	assert.Equal(t, "admin", response.Username)
+	assert.Equal(t, "admin@root.fr", response.Email)
+	assert.Equal(t, 0, response.Role)
+
+}
+
+func TestLoginWrongPassword(t *testing.T) {
+	requestPayload := AuthRequest{
+		Username: "admin",
+		Password: "non",
+	}
+
+	jsonData, jsonErr := json.Marshal(&requestPayload)
+	if jsonErr != nil {
+		t.Fatal(jsonErr.Error())
+	}
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	recorder := httptest.NewRecorder()
+
+	login(recorder, request)
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+}
+
+func TestLoginNonExistingUser(t *testing.T) {
+	requestPayload := AuthRequest{
+		Username: "toto",
+		Password: "ah",
+	}
+
+	jsonData, jsonErr := json.Marshal(&requestPayload)
+	if jsonErr != nil {
+		t.Fatal(jsonErr.Error())
+	}
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	recorder := httptest.NewRecorder()
+
+	login(recorder, request)
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+
 }
