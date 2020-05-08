@@ -471,3 +471,78 @@ func TestModifyAccountAlreadyExistingAddress(t *testing.T) {
 
 	cleanupDb()
 }
+func _modifyPassword(t *testing.T, account *PasswordModifyRequest) *httptest.ResponseRecorder {
+
+	jsonData, jsonErr := json.Marshal(account)
+	if jsonErr != nil {
+		t.Fatal(jsonErr.Error())
+	}
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	recorder := httptest.NewRecorder()
+
+	modifyPassword(recorder, request)
+
+	return recorder
+}
+
+func TestModifyPasswordOk(t *testing.T) {
+	setupMockDbData()
+
+	recorder := _modifyPassword(t, &PasswordModifyRequest{
+		Username:    "admin" + TestId,
+		OldPassword: "admin",
+		NewPassword: "risotto",
+	})
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+
+	cleanupDb()
+}
+
+func TestModifyPasswordBadCredentials(t *testing.T) {
+	setupMockDbData()
+
+	recorder := _modifyPassword(t, &PasswordModifyRequest{
+		Username:    "admin" + TestId,
+		OldPassword: "nope",
+		NewPassword: "risotto",
+	})
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	cleanupDb()
+}
+
+func TestModifyPasswordToEmpty(t *testing.T) {
+	setupMockDbData()
+
+	recorder := _modifyPassword(t, &PasswordModifyRequest{
+		Username:    "admin" + TestId,
+		OldPassword: "nope",
+		NewPassword: "",
+	})
+
+	responseBody := recorder.Body.Bytes()
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "[MICRO-AUTH] Wrong request body format, validation failed", string(responseBody))
+	cleanupDb()
+}
+
+func TestModifyPasswordInexistentUser(t *testing.T) {
+	setupMockDbData()
+
+	recorder := _modifyPassword(t, &PasswordModifyRequest{
+		Username:    "nada" + TestId,
+		OldPassword: "nope",
+		NewPassword: "nope2",
+	})
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+
+	cleanupDb()
+}
