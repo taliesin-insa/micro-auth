@@ -131,6 +131,27 @@ func TestLoginNonExistingUser(t *testing.T) {
 	cleanupDb()
 }
 
+func TestVerifyInvalidBodyFormat(t *testing.T) {
+	setupMockDbData()
+	loginRecorder := _login(t, "admin"+TestId, "admin")
+	assert.Equal(t, http.StatusOK, loginRecorder.Code)
+
+	jsonData := []byte("bad format")
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	checkRecorder := httptest.NewRecorder()
+
+	verify(checkRecorder, request)
+
+	assert.Equal(t, http.StatusBadRequest, checkRecorder.Code)
+
+	cleanupDb()
+}
+
 func TestVerifyValidToken(t *testing.T) {
 	setupMockDbData()
 
@@ -194,7 +215,7 @@ func TestVerifyInvalidToken(t *testing.T) {
 
 	verify(checkRecorder, request)
 
-	assert.Equal(t, http.StatusUnauthorized, checkRecorder.Code)
+	assert.Equal(t, http.StatusBadRequest, checkRecorder.Code)
 
 	cleanupDb()
 }
