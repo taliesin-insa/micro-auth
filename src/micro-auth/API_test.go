@@ -110,7 +110,7 @@ func TestSuccessfulLogin(t *testing.T) {
 }
 
 func TestLoginWrongPassword(t *testing.T) {
-	recorder := _login(t, "admin"+TestId, "admin")
+	recorder := _login(t, "admin"+TestId, "nope")
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 }

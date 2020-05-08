@@ -290,7 +290,7 @@ func checkToken(tokenString string) (*JwtClaims, error, int) {
 		if intCount == 1 {
 			return claims, nil, http.StatusOK
 		} else {
-			return nil, nil, http.StatusUnauthorized
+			return nil, errors.New("[MICRO-AUTH] Session invalid/expired"), http.StatusUnauthorized
 		}
 
 	} else {
