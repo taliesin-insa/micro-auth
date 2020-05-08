@@ -287,7 +287,7 @@ func TestVerifyValidTokenNotInSessions(t *testing.T) {
 	cleanupDb()
 }
 
-func _create_account(t *testing.T, account *AccountCreationRequest) *httptest.ResponseRecorder {
+func _createAccount(t *testing.T, account *AccountCreationRequest) *httptest.ResponseRecorder {
 
 	jsonData, jsonErr := json.Marshal(account)
 	if jsonErr != nil {
@@ -310,7 +310,7 @@ func TestCreateAccountOk(t *testing.T) {
 	setupMockDbData()
 	adminToken, _ := setupMockSessionDbData()
 
-	recorder := _create_account(t, &AccountCreationRequest{
+	recorder := _createAccount(t, &AccountCreationRequest{
 		AdminToken: adminToken,
 		Username: "naruto"+TestId,
 		Password: "test",
@@ -335,7 +335,7 @@ func TestCreateAccountEmptyField(t *testing.T) {
 	setupMockDbData()
 	adminToken, _ := setupMockSessionDbData()
 
-	recorder := _create_account(t, &AccountCreationRequest{
+	recorder := _createAccount(t, &AccountCreationRequest{
 		AdminToken: adminToken,
 		Username: "naruto"+TestId,
 		Password: "",
@@ -355,7 +355,7 @@ func TestCreateAccountInsufficientPermissions(t *testing.T) {
 	setupMockDbData()
 	_, userToken := setupMockSessionDbData()
 
-	recorder := _create_account(t, &AccountCreationRequest{
+	recorder := _createAccount(t, &AccountCreationRequest{
 		AdminToken: userToken,
 		Username: "naruto"+TestId,
 		Password: "test",
@@ -375,7 +375,7 @@ func TestCreateAccountAlreadyExists(t *testing.T) {
 	setupMockDbData()
 	adminToken, _ := setupMockSessionDbData()
 
-	recorder := _create_account(t, &AccountCreationRequest{
+	recorder := _createAccount(t, &AccountCreationRequest{
 		AdminToken: adminToken,
 		Username: "admin"+TestId,
 		Password: "toto",
@@ -387,6 +387,87 @@ func TestCreateAccountAlreadyExists(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 	assert.Equal(t, "[MICRO-AUTH] Username or email already exists", string(responseBody))
+
+	cleanupDb()
+}
+
+func _modifyAccount(t *testing.T, account *AccountModifyRequest) *httptest.ResponseRecorder {
+
+	jsonData, jsonErr := json.Marshal(account)
+	if jsonErr != nil {
+		t.Fatal(jsonErr.Error())
+	}
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	recorder := httptest.NewRecorder()
+
+	modifyAccount(recorder, request)
+
+	return recorder
+}
+
+func TestModifyAccountOk(t *testing.T) {
+	setupMockDbData()
+	adminToken, _ := setupMockSessionDbData()
+
+	recorder := _modifyAccount(t, &AccountModifyRequest{
+		AdminToken: adminToken,
+		Username: "admin"+TestId,
+		Role: RoleAnnotator,
+		Email: "totoro@root.fr",
+	})
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	responseBody := recorder.Body.Bytes()
+	response := AccountData{}
+
+	json.Unmarshal(responseBody, &response)
+
+	assert.Equal(t, "admin"+TestId, response.Username)
+	assert.Equal(t, "totoro@root.fr", response.Email)
+	assert.Equal(t, RoleAnnotator, response.Role)
+
+	cleanupDb()
+}
+
+func TestModifyAccountInsufficientPermissions(t *testing.T) {
+	setupMockDbData()
+	_, userToken := setupMockSessionDbData()
+
+	recorder := _modifyAccount(t, &AccountModifyRequest{
+		AdminToken: userToken,
+		Username: "admin"+TestId,
+		Role: RoleAnnotator,
+		Email: "totoro@root.fr",
+	})
+
+	responseBody := recorder.Body.Bytes()
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Equal(t, "[MICRO-AUTH] Insufficient permissions to modify an account", string(responseBody))
+
+	cleanupDb()
+}
+
+func TestModifyAccountAlreadyExistingAddress(t *testing.T) {
+	setupMockDbData()
+	_, userToken := setupMockSessionDbData()
+
+	recorder := _modifyAccount(t, &AccountModifyRequest{
+		AdminToken: userToken,
+		Username: "admin"+TestId,
+		Role: RoleAnnotator,
+		Email: "user@root.fr",
+	})
+
+	responseBody := recorder.Body.Bytes()
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Equal(t, "[MICRO-AUTH] Email already exists", string(responseBody))
 
 	cleanupDb()
 }

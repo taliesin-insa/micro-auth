@@ -85,11 +85,13 @@ func (r AccountCreationRequest) isValid() bool {
 
 type AccountModifyRequest struct {
 	AdminToken 	string
-	AccountData
+	Username	string
+	Email		string
+	Role		int
 }
 
 func (r AccountModifyRequest) isValid() bool {
-	return r.AdminToken != "" && r.AccountData.isValid()
+	return r.AdminToken != "" && r.Username != "" && r.Email != "" && r.Role >= 0 && r.Role <= 1
 }
 
 
