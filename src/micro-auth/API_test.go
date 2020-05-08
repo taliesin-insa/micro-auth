@@ -18,6 +18,28 @@ import (
 
 var TestId string
 
+func _generateValidToken(username string, role int, email string) string {
+
+	stdclaims := jwt.StandardClaims{
+		IssuedAt: time.Now().Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, JwtClaims{
+		Username: username,
+		Role: role,
+		Email: email,
+		StandardClaims: stdclaims,
+	})
+
+	tokenString, signingErr := token.SignedString(HMACSecret)
+
+	if signingErr != nil {
+		panic(signingErr)
+	}
+
+	return tokenString
+}
+
 func setupMockDbData() {
 	_, insertErr := Db.Exec("INSERT INTO users VALUES" +
 		"('admin"+TestId+"','8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', 0,'admin@root.fr'), " +
@@ -26,6 +48,21 @@ func setupMockDbData() {
 	if insertErr != nil {
 		panic(insertErr.Error())
 	}
+}
+
+func setupMockSessionDbData() (string, string) {
+	adminToken := _generateValidToken("admin", RoleAdmin, "admin@root.fr")
+	userToken := _generateValidToken("user", RoleAnnotator, "user@root.fr")
+
+	_, insertErr := Db.Exec("INSERT INTO sessions (token) VALUES" +
+		"('"+adminToken+"'), " +
+		"('"+userToken+"')")
+
+	if insertErr != nil {
+		panic(insertErr.Error())
+	}
+
+	return adminToken, userToken
 }
 
 func cleanupDb() {
@@ -106,7 +143,7 @@ func TestSuccessfulLogin(t *testing.T) {
 
 	assert.Equal(t, "admin"+TestId, response.Username)
 	assert.Equal(t, "admin@root.fr", response.Email)
-	assert.Equal(t, 0, response.Role)
+	assert.Equal(t, RoleAdmin, response.Role)
 
 	cleanupDb()
 }
@@ -220,32 +257,10 @@ func TestVerifyInvalidToken(t *testing.T) {
 	cleanupDb()
 }
 
-func _generateValidToken(t *testing.T, username string, role int, email string) string {
-
-	stdclaims := jwt.StandardClaims{
-		IssuedAt: time.Now().Unix(),
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, JwtClaims{
-		Username: username,
-		Role: role,
-		Email: email,
-		StandardClaims: stdclaims,
-	})
-
-	tokenString, signingErr := token.SignedString(HMACSecret)
-
-	if signingErr != nil {
-		t.Fatal(signingErr)
-	}
-
-	return tokenString
-}
-
 func TestVerifyValidTokenNotInSessions(t *testing.T) {
 	setupMockDbData()
 
-	token := _generateValidToken(t, "admin"+TestId, RoleAdmin, "admin@root.fr")
+	token := _generateValidToken("admin"+TestId, RoleAdmin, "admin@root.fr")
 
 	requestPayload := VerifyRequest{
 		Token: token,
@@ -264,8 +279,49 @@ func TestVerifyValidTokenNotInSessions(t *testing.T) {
 	checkRecorder := httptest.NewRecorder()
 
 	verify(checkRecorder, request)
+	responseBody := checkRecorder.Body.Bytes()
 
 	assert.Equal(t, http.StatusUnauthorized, checkRecorder.Code)
+	assert.Equal(t, "[MICRO-AUTH] Session invalid/expired", string(responseBody))
+
+	cleanupDb()
+}
+
+func TestCreateAccountOk(t *testing.T) {
+	setupMockDbData()
+	adminToken, _ := setupMockSessionDbData()
+
+	requestPayload := AccountCreationRequest{
+		AdminToken: adminToken,
+		Username: "naruto"+TestId,
+		Password: "test",
+		Role: RoleAnnotator,
+		Email: "naruto@root.fr",
+	}
+
+	jsonData, jsonErr := json.Marshal(&requestPayload)
+	if jsonErr != nil {
+		t.Fatal(jsonErr.Error())
+	}
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	recorder := httptest.NewRecorder()
+
+	createAccount(recorder, request)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	responseBody := recorder.Body.Bytes()
+	response := AuthResponse{}
+
+	json.Unmarshal(responseBody, &response)
+
+	assert.Equal(t, "naruto"+TestId, response.Username)
+	assert.Equal(t, "naruto@root.fr", response.Email)
+	assert.Equal(t, RoleAnnotator, response.Role)
 
 	cleanupDb()
 }

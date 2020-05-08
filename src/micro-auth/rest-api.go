@@ -450,8 +450,6 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: more checks on validity (email & password non empty)
-
 	insertSessionStatement, insertPrepareErr := Db.Prepare("INSERT INTO users VALUES (?,?,?,?)")
 
 	if insertPrepareErr != nil {
