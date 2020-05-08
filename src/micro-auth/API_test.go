@@ -61,13 +61,13 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	setupMockDbData()
 
-	m.Run()
+	code := m.Run()
 
 	cleanupDb()
 	Db.Close()
 
+	os.Exit(code)
 }
 
 func _login(t *testing.T, username string, password string) *httptest.ResponseRecorder {
@@ -94,6 +94,7 @@ func _login(t *testing.T, username string, password string) *httptest.ResponseRe
 }
 
 func TestSuccessfulLogin(t *testing.T) {
+	setupMockDbData()
 
 	recorder := _login(t, "admin"+TestId, "admin")
 
@@ -107,21 +108,32 @@ func TestSuccessfulLogin(t *testing.T) {
 	assert.Equal(t, "admin@root.fr", response.Email)
 	assert.Equal(t, 0, response.Role)
 
+	cleanupDb()
 }
 
 func TestLoginWrongPassword(t *testing.T) {
+	setupMockDbData()
+
 	recorder := _login(t, "admin"+TestId, "nope")
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+
+	cleanupDb()
 }
 
 func TestLoginNonExistingUser(t *testing.T) {
+	setupMockDbData()
+
 	recorder := _login(t, "null", "admin")
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+
+	cleanupDb()
 }
 
 func TestVerifyValidToken(t *testing.T) {
+	setupMockDbData()
+
 	loginRecorder := _login(t, "admin"+TestId, "admin")
 	assert.Equal(t, http.StatusOK, loginRecorder.Code)
 
@@ -149,9 +161,13 @@ func TestVerifyValidToken(t *testing.T) {
 	verify(checkRecorder, request)
 
 	assert.Equal(t, http.StatusOK, checkRecorder.Code)
+
+	cleanupDb()
 }
 
 func TestVerifyInvalidToken(t *testing.T) {
+	setupMockDbData()
+
 	loginRecorder := _login(t, "admin"+TestId, "admin")
 	assert.Equal(t, http.StatusOK, loginRecorder.Code)
 
@@ -178,7 +194,9 @@ func TestVerifyInvalidToken(t *testing.T) {
 
 	verify(checkRecorder, request)
 
-	assert.Equal(t, http.StatusOK, checkRecorder.Code)
+	assert.Equal(t, http.StatusUnauthorized, checkRecorder.Code)
+
+	cleanupDb()
 }
 
 func _generateValidToken(t *testing.T, username string, role int, email string) string {
@@ -204,6 +222,8 @@ func _generateValidToken(t *testing.T, username string, role int, email string) 
 }
 
 func TestVerifyValidTokenNotInSessions(t *testing.T) {
+	setupMockDbData()
+
 	token := _generateValidToken(t, "admin"+TestId, RoleAdmin, "admin@root.fr")
 
 	requestPayload := VerifyRequest{
@@ -225,4 +245,6 @@ func TestVerifyValidTokenNotInSessions(t *testing.T) {
 	verify(checkRecorder, request)
 
 	assert.Equal(t, http.StatusUnauthorized, checkRecorder.Code)
+
+	cleanupDb()
 }
