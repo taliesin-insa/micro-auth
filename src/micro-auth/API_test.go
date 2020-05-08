@@ -1,8 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
+	"github.com/stretchr/testify/assert"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 )
@@ -53,6 +59,25 @@ func TestMain(m *testing.M) {
 
 }
 
-func TestConnect(t *testing.T) {
+func TestSuccessfulConnect(t *testing.T) {
+	requestPayload := AuthRequest{
+		Username: "admin",
+		Password: "admin",
+	}
 
+	jsonData, jsonErr := json.Marshal(&requestPayload)
+	if jsonErr != nil {
+		t.Fatal(jsonErr.Error())
+	}
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	recorder := httptest.NewRecorder()
+
+	login(recorder, request)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
 }
