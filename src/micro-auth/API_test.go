@@ -533,7 +533,7 @@ func TestModifyPasswordToEmpty(t *testing.T) {
 	cleanupDb()
 }
 
-func TestModifyPasswordInexistentUser(t *testing.T) {
+func TestModifyPasswordUnknownUser(t *testing.T) {
 	setupMockDbData()
 
 	recorder := _modifyPassword(t, &PasswordModifyRequest{
@@ -543,6 +543,72 @@ func TestModifyPasswordInexistentUser(t *testing.T) {
 	})
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+
+	cleanupDb()
+}
+func _listAccounts(t *testing.T, account *VerifyRequest) *httptest.ResponseRecorder {
+
+	jsonData, jsonErr := json.Marshal(account)
+	if jsonErr != nil {
+		t.Fatal(jsonErr.Error())
+	}
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	recorder := httptest.NewRecorder()
+
+	listAccounts(recorder, request)
+
+	return recorder
+}
+
+func TestListAccountsOk(t *testing.T) {
+	setupMockDbData()
+	adminToken, _ := setupMockSessionDbData()
+
+	recorder := _listAccounts(t, &VerifyRequest{
+		Token: adminToken,
+	})
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	responseBody := recorder.Body.Bytes()
+	response := make([]AccountData, 0)
+
+	json.Unmarshal(responseBody, &response)
+
+	expectedResult := make([]AccountData, 2)
+	expectedResult[0] = AccountData{
+		Username: "admin"+TestId,
+		Email:    "admin@root.fr",
+		Role:     RoleAdmin,
+	}
+
+	expectedResult[1] = AccountData{
+		Username: "user"+TestId,
+		Email:    "user@root.fr",
+		Role:     RoleAnnotator,
+	}
+
+	assert.Equal(t, expectedResult, response)
+
+	cleanupDb()
+}
+
+func TestListAccountsInsufficientPermissions(t *testing.T) {
+	setupMockDbData()
+	_, userToken := setupMockSessionDbData()
+
+	recorder := _listAccounts(t, &VerifyRequest{
+		Token: userToken,
+	})
+
+	responseBody := recorder.Body.Bytes()
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Equal(t, "[MICRO-AUTH] Insufficient permissions to list accounts", string(responseBody))
 
 	cleanupDb()
 }
