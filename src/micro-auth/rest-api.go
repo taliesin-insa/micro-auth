@@ -776,7 +776,7 @@ func deleteAccount(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Printf("[ERROR] Rows Affected by delete user statement different to 1, count = %v", count)
+		log.Printf("[ERROR] Rows Affected by delete user statement different from 1, count = %v", count)
 		w.Write([]byte("[MICRO-AUTH] User identifier does not exist"))
 		return
 	}
@@ -836,7 +836,7 @@ func logout(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("[ERROR] Rows Affected by delete token statement different to 1")
+		log.Printf("[ERROR] Rows Affected by delete token statement different from 1")
 		w.Write([]byte("[MICRO-AUTH] Could not delete token from database"))
 		return
 	}
