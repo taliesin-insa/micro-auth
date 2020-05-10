@@ -683,3 +683,65 @@ func TestDeleteAccountNonExistingUser(t *testing.T) {
 
 	cleanupDb()
 }
+
+func _logout(t *testing.T, account *VerifyRequest) *httptest.ResponseRecorder {
+
+	jsonData, jsonErr := json.Marshal(account)
+	if jsonErr != nil {
+		t.Fatal(jsonErr.Error())
+	}
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	recorder := httptest.NewRecorder()
+
+	logout(recorder, request)
+
+	return recorder
+}
+
+func TestLogoutOk(t *testing.T) {
+	setupMockDbData()
+
+	loginRecorder := _login(t, "admin"+TestId, "admin")
+
+	assert.Equal(t, http.StatusOK, loginRecorder.Code)
+	responseBody := loginRecorder.Body.Bytes()
+	response := AuthResponse{}
+
+	json.Unmarshal(responseBody, &response)
+
+	logoutRecorder := _logout(t, &VerifyRequest{Token: response.Token})
+	assert.Equal(t, http.StatusOK, logoutRecorder.Code)
+
+	_, checkErr, _ := checkToken(response.Token)
+	assert.Equal(t, "[MICRO-AUTH] Session invalid/expired", checkErr.Error())
+
+	cleanupDb()
+}
+
+func TestLogoutTwice(t *testing.T) {
+	setupMockDbData()
+
+	loginRecorder := _login(t, "admin"+TestId, "admin")
+
+	assert.Equal(t, http.StatusOK, loginRecorder.Code)
+	responseBody := loginRecorder.Body.Bytes()
+	response := AuthResponse{}
+
+	json.Unmarshal(responseBody, &response)
+
+	logoutRecorder0 := _logout(t, &VerifyRequest{Token: response.Token})
+	assert.Equal(t, http.StatusOK, logoutRecorder0.Code)
+
+	logoutRecorder1 := _logout(t, &VerifyRequest{Token: response.Token})
+	responseBodyLR1 := logoutRecorder1.Body.Bytes()
+
+	assert.Equal(t, http.StatusUnauthorized, logoutRecorder1.Code)
+	assert.Equal(t, "[MICRO-AUTH] Session invalid/expired", string(responseBodyLR1))
+
+	cleanupDb()
+}
