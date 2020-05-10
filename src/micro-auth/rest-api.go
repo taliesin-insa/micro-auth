@@ -875,12 +875,17 @@ func main() {
 
 	// check if table structure exists and if not create it
 	if !checkTablesPresent() {
+		log.Println("[INFO] Initial setup: creating needed tables")
 		createTables()
 	}
 
 	// check if at least one admin account exists and if not create the default one (admin/admin)
 	if !checkIfAdminUserExists() {
 		createInitialAccount()
+		log.Println("[INFO] Default admin account created")
+		log.Println("[INFO] Username: admin")
+		log.Println("[INFO] Password: admin")
+		log.Println("[INFO] PLEASE CHANGE THE PASSWORD ON FIRST LOGIN!")
 	}
 
 	router := mux.NewRouter().StrictSlash(true)
