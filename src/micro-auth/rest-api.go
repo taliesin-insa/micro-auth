@@ -85,11 +85,13 @@ func (r AccountCreationRequest) isValid() bool {
 
 type AccountModifyRequest struct {
 	AdminToken 	string
-	AccountData
+	Username	string
+	Email		string
+	Role		int
 }
 
 func (r AccountModifyRequest) isValid() bool {
-	return r.AdminToken != "" && r.AccountData.isValid()
+	return r.AdminToken != "" && r.Username != "" && r.Email != "" && r.Role >= 0 && r.Role <= 1
 }
 
 
@@ -290,7 +292,7 @@ func checkToken(tokenString string) (*JwtClaims, error, int) {
 		if intCount == 1 {
 			return claims, nil, http.StatusOK
 		} else {
-			return nil, nil, http.StatusUnauthorized
+			return nil, errors.New("[MICRO-AUTH] Session invalid/expired"), http.StatusUnauthorized
 		}
 
 	} else {
@@ -449,8 +451,6 @@ func createAccount(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("[MICRO-AUTH] Insufficient permissions to create an account"))
 		return
 	}
-
-	// TODO: more checks on validity (email & password non empty)
 
 	insertSessionStatement, insertPrepareErr := Db.Prepare("INSERT INTO users VALUES (?,?,?,?)")
 
@@ -762,7 +762,7 @@ func deleteAccount(w http.ResponseWriter, r *http.Request) {
 	if deleteErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("[ERROR] Error while executing delete (deleteAccount) : %v", deleteErr.Error())
-		w.Write([]byte("[MICRO-AUTH] Could not delete user from database"))
+		w.Write([]byte("[MICRO-AUTH] Error while deleting user from database"))
 		return
 	}
 
@@ -775,9 +775,9 @@ func deleteAccount(w http.ResponseWriter, r *http.Request) {
 	if count == 1 {
 		w.WriteHeader(http.StatusOK)
 	} else {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("[ERROR] Rows Affected by delete user statement different to 1")
-		w.Write([]byte("[MICRO-AUTH] Could not delete user from database"))
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[ERROR] Rows Affected by delete user statement different from 1, count = %v", count)
+		w.Write([]byte("[MICRO-AUTH] User identifier does not exist"))
 		return
 	}
 
@@ -813,6 +813,7 @@ func logout(w http.ResponseWriter, r *http.Request) {
 	if checkingErr != nil {
 		w.WriteHeader(statusCode)
 		w.Write([]byte(checkingErr.Error()))
+		return
 	}
 
 	deleteStatement, deleteErr := Db.Exec("DELETE FROM sessions WHERE token = ?", reqData.Token)
@@ -835,7 +836,7 @@ func logout(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("[ERROR] Rows Affected by delete token statement different to 1")
+		log.Printf("[ERROR] Rows Affected by delete token statement different from 1")
 		w.Write([]byte("[MICRO-AUTH] Could not delete token from database"))
 		return
 	}
@@ -845,8 +846,22 @@ func logout(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
+	var hostValue string
+	var portValue string
 	var passwordValue string
 	var dbName = "taliesin"
+
+	if value, isDbHostPresent := os.LookupEnv("DB_HOST") ; !isDbHostPresent {
+		panic("DB_HOST is not present in env, aborting.")
+	} else {
+		hostValue = value
+	}
+
+	if value, isDbPortPresent := os.LookupEnv("DB_PORT") ; !isDbPortPresent {
+		panic("DB_PORT is not present in env, aborting.")
+	} else {
+		portValue = value
+	}
 
 	if value, isDbPasswordPresent := os.LookupEnv("DB_PASSWORD") ; !isDbPasswordPresent {
 		panic("DB_PASSWORD is not present in env, aborting.")
@@ -864,7 +879,7 @@ func main() {
 		dbName = "taliesin_dev"
 	}
 
-	databasePtr, err := sql.Open("mysql", "taliesin:"+passwordValue+"@tcp(10.133.33.51:3306)/"+dbName)
+	databasePtr, err := sql.Open("mysql", "taliesin:"+passwordValue+"@tcp("+hostValue+":"+portValue+")/"+dbName)
 	Db = databasePtr
 
 	if err != nil {
