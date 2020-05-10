@@ -2,6 +2,7 @@
 image: docker:latest
 
 stages:
+  - test
   - build
   - dev
   - production
@@ -31,6 +32,16 @@ dev:
     - kubectl config use-context default
     - kubectl apply -f ci/
     - kubectl rollout restart deployment/auth-dev -n gitlab-managed-apps
+
+test:
+  stage: test
+  image: golang:alpine
+  script:
+    - cd src/${CI_PROJECT_NAME}
+    - apk add --no-cache curl git
+    - go get -d ./...
+    - export CGO_ENABLED=0
+    - go test --cover -v
 
 production:
   stage: production
