@@ -51,7 +51,7 @@ func createTables() {
 }
 
 func checkIfAdminUserExists() bool {
-	selectStatement, selectErr := Db.Query("SELECT count(username) FROM users WHERE role = 0")
+	selectStatement, selectErr := Db.Prepare("SELECT count(username) FROM users WHERE role = 0")
 
 	if selectErr != nil {
 		log.Fatalf("[FATAL] Error while checking if admin user exists): %v", selectErr.Error())
@@ -61,7 +61,7 @@ func checkIfAdminUserExists() bool {
 
 	var count string
 
-	sessionQueryErr := selectStatement.Scan(&count)
+	sessionQueryErr := selectStatement.QueryRow().Scan(&count)
 	intCount, sessionCountErr := strconv.Atoi(count)
 
 	if sessionQueryErr != nil {
