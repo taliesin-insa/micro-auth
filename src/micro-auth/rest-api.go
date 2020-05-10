@@ -358,7 +358,7 @@ func checkIfAccountExist(username string, email string) (error, int) {
 	}
 
 	if sessionQueryErr != nil {
-		log.Printf("[ERROR] Error while querying session users: %v", selectErr.Error())
+		log.Printf("[ERROR] Error while querying session users: %v", sessionQueryErr.Error())
 		return errors.New("[MICRO-AUTH] Could not query database (checkIfAccountExist)"), http.StatusInternalServerError
 	}
 
@@ -390,7 +390,7 @@ func checkIfEmailExist(username string, email string) (error, int) {
 	}
 
 	if sessionQueryErr != nil {
-		log.Printf("[ERROR] Error while querying session users: %v", selectErr.Error())
+		log.Printf("[ERROR] Error while querying session users: %v", sessionQueryErr.Error())
 		return errors.New("[MICRO-AUTH] Could not query database (checkIfEmailExist)"), http.StatusInternalServerError
 	}
 
@@ -843,7 +843,6 @@ func logout(w http.ResponseWriter, r *http.Request) {
 
 }
 
-
 func main() {
 
 	var passwordValue string
@@ -873,6 +872,16 @@ func main() {
 	}
 
 	defer Db.Close()
+
+	// check if table structure exists and if not create it
+	if !checkTablesPresent() {
+		createTables()
+	}
+
+	// check if at least one admin account exists and if not create the default one (admin/admin)
+	if !checkIfAdminUserExists() {
+		createInitialAccount()
+	}
 
 	router := mux.NewRouter().StrictSlash(true)
 
