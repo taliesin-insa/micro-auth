@@ -533,7 +533,7 @@ func TestModifyPasswordToEmpty(t *testing.T) {
 	cleanupDb()
 }
 
-func TestModifyPasswordUnknownUser(t *testing.T) {
+func TestModifyPasswordNonExistingUserUser(t *testing.T) {
 	setupMockDbData()
 
 	recorder := _modifyPassword(t, &PasswordModifyRequest{
@@ -609,6 +609,77 @@ func TestListAccountsInsufficientPermissions(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 	assert.Equal(t, "[MICRO-AUTH] Insufficient permissions to list accounts", string(responseBody))
+
+	cleanupDb()
+}
+
+func _deleteAccount(t *testing.T, account *AccountDeletionRequest) *httptest.ResponseRecorder {
+
+	jsonData, jsonErr := json.Marshal(account)
+	if jsonErr != nil {
+		t.Fatal(jsonErr.Error())
+	}
+
+	request := &http.Request{
+		Method: http.MethodPost,
+		Body: ioutil.NopCloser(bytes.NewBuffer(jsonData)),
+	}
+
+	recorder := httptest.NewRecorder()
+
+	deleteAccount(recorder, request)
+
+	return recorder
+}
+
+func TestDeleteAccountOk(t *testing.T) {
+	setupMockDbData()
+	adminToken, _ := setupMockSessionDbData()
+
+	recorder := _deleteAccount(t, &AccountDeletionRequest{
+		Username: "user"+TestId,
+		AdminToken: adminToken,
+	})
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+
+	cleanupDb()
+}
+
+/*func TestDeleteAccountLastAdminAccount(t *testing.T) {
+	// TODO
+}*/
+
+func TestDeleteAccountInsufficientPermissions(t *testing.T) {
+	setupMockDbData()
+	_, userToken := setupMockSessionDbData()
+
+	recorder := _deleteAccount(t, &AccountDeletionRequest{
+		Username: "admin"+TestId,
+		AdminToken: userToken,
+	})
+
+	responseBody := recorder.Body.Bytes()
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Equal(t, "[MICRO-AUTH] Insufficient permissions to delete an account", string(responseBody))
+
+	cleanupDb()
+}
+
+func TestDeleteAccountNonExistingUser(t *testing.T) {
+	setupMockDbData()
+	adminToken, _ := setupMockSessionDbData()
+
+	recorder := _deleteAccount(t, &AccountDeletionRequest{
+		Username: "toto"+TestId,
+		AdminToken: adminToken,
+	})
+
+	responseBody := recorder.Body.Bytes()
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "[MICRO-AUTH] User identifier does not exist", string(responseBody))
 
 	cleanupDb()
 }

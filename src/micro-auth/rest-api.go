@@ -762,7 +762,7 @@ func deleteAccount(w http.ResponseWriter, r *http.Request) {
 	if deleteErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("[ERROR] Error while executing delete (deleteAccount) : %v", deleteErr.Error())
-		w.Write([]byte("[MICRO-AUTH] Could not delete user from database"))
+		w.Write([]byte("[MICRO-AUTH] Error while deleting user from database"))
 		return
 	}
 
@@ -775,9 +775,9 @@ func deleteAccount(w http.ResponseWriter, r *http.Request) {
 	if count == 1 {
 		w.WriteHeader(http.StatusOK)
 	} else {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("[ERROR] Rows Affected by delete user statement different to 1")
-		w.Write([]byte("[MICRO-AUTH] Could not delete user from database"))
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[ERROR] Rows Affected by delete user statement different to 1, count = %v", count)
+		w.Write([]byte("[MICRO-AUTH] User identifier does not exist"))
 		return
 	}
 
