@@ -846,8 +846,22 @@ func logout(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
+	var hostValue string
+	var portValue string
 	var passwordValue string
 	var dbName = "taliesin"
+
+	if value, isDbHostPresent := os.LookupEnv("DB_HOST") ; !isDbHostPresent {
+		panic("DB_HOST is not present in env, aborting.")
+	} else {
+		hostValue = value
+	}
+
+	if value, isDbPortPresent := os.LookupEnv("DB_PORT") ; !isDbPortPresent {
+		panic("DB_PORT is not present in env, aborting.")
+	} else {
+		portValue = value
+	}
 
 	if value, isDbPasswordPresent := os.LookupEnv("DB_PASSWORD") ; !isDbPasswordPresent {
 		panic("DB_PASSWORD is not present in env, aborting.")
@@ -865,7 +879,7 @@ func main() {
 		dbName = "taliesin_dev"
 	}
 
-	databasePtr, err := sql.Open("mysql", "taliesin:"+passwordValue+"@tcp(10.133.33.51:3306)/"+dbName)
+	databasePtr, err := sql.Open("mysql", "taliesin:"+passwordValue+"@tcp("+hostValue+":"+portValue+")/"+dbName)
 	Db = databasePtr
 
 	if err != nil {

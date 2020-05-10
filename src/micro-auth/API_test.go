@@ -82,6 +82,20 @@ func TestMain(m *testing.M) {
 	TestId = strconv.FormatInt(nsec, 10)
 
 	var passwordValue string
+	var hostValue string
+	var portValue string
+
+	if value, isDbHostPresent := os.LookupEnv("DB_HOST") ; !isDbHostPresent {
+		panic("DB_HOST is not present in env, aborting.")
+	} else {
+		hostValue = value
+	}
+
+	if value, isDbPortPresent := os.LookupEnv("DB_PORT") ; !isDbPortPresent {
+		panic("DB_PORT is not present in env, aborting.")
+	} else {
+		portValue = value
+	}
 
 	if value, isDbPasswordPresent := os.LookupEnv("DB_PASSWORD") ; !isDbPasswordPresent {
 		panic("DB_PASSWORD is not present in env, aborting.")
@@ -91,7 +105,7 @@ func TestMain(m *testing.M) {
 
 	HMACSecret = []byte("placeholder_secret")
 
-	databasePtr, err := sql.Open("mysql", "test:"+passwordValue+"@tcp(10.133.33.51:3306)/test")
+	databasePtr, err := sql.Open("mysql", "test:"+passwordValue+"@tcp("+hostValue+":"+portValue+")/test")
 	Db = databasePtr
 
 	if err != nil {
