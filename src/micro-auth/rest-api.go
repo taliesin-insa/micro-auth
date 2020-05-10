@@ -813,6 +813,7 @@ func logout(w http.ResponseWriter, r *http.Request) {
 	if checkingErr != nil {
 		w.WriteHeader(statusCode)
 		w.Write([]byte(checkingErr.Error()))
+		return
 	}
 
 	deleteStatement, deleteErr := Db.Exec("DELETE FROM sessions WHERE token = ?", reqData.Token)
