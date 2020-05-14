@@ -1,7 +1,14 @@
 # Auth
 A microservice managing and storing user credentials.
 
-### Exposed REST API
+## Initial setup
+
+Please verify that you define the HMAC_SECRET, DB_HOST, DB_PORT, DB_PASSWORD and MICRO_ENVIRONMENT accordingly in the pod environment variables.
+The database used needs to be compatible with MySQL syntax and must have the three following databases created : **taliesin**, **taliesin_dev** and **test** (for the unit tests).
+
+When you are starting up the cluster, required tables and a admin/admin account are automatically created.
+
+## Exposed REST API
 
 See [the API specification](api.md).
 

@@ -296,7 +296,7 @@ func checkToken(tokenString string) (*JwtClaims, error, int) {
 		}
 
 	} else {
-		return nil, nil, http.StatusUnauthorized
+		return nil, errors.New("[MICRO-AUTH] Invalid token"), http.StatusBadRequest
 	}
 
 }
